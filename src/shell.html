@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Ink Battles</title>
+<meta name="description" content="Raise a banner. Win the war. Lose no one.">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ink Battles">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,800;0,9..144,900;1,9..144,500;1,9..144,900&family=Figtree:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/*STYLE*/
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Battle map"></canvas>
+<header id="top" hidden>
+  <div style="min-width:0"><div class="hn" id="hn">Chapter</div><div class="sub" id="hsub">Goal</div></div>
+  <div class="pts"><div class="pv" id="turn">1</div><div class="sub" id="tsub">Turn</div></div>
+</header>
+<button id="pause" hidden aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg></button>
+<div id="tip" hidden role="status" aria-live="polite"><p id="tipt"></p><button id="tipx" aria-label="Close tip"><svg viewBox="0 0 34 34"><circle class="ring" cx="17" cy="17" r="14"/><path class="x" d="M12 12l10 10M22 12l-10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></button></div>
+<div id="callout" aria-live="polite"><b></b><span></span></div>
+<div id="dock" hidden><div class="inner" id="dockin"></div></div>
+<div id="card" hidden></div>
+<script>
+/*SCRIPT*/
+</script>
+</body>
+</html>

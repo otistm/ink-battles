@@ -829,22 +829,45 @@ function dockBase(){
   if(SAFEB===null){ const p=document.createElement('div'); p.style.cssText='position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)'; document.body.appendChild(p); SAFEB=parseFloat(getComputedStyle(p).paddingBottom)||0; p.remove(); }
   return (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dockH'))||170)+SAFEB;
 }
+// the camera: when the whole map would be too small to play, it scrolls up and down instead
+const CAM={v:0,t:0,max:0,on:false,ah:0,top:0,bot:0,drag:false};
 function layout(){
   if(!B) return;
   let top=$('top').hidden?0:$('top').getBoundingClientRect().bottom;
   if(!$('tip').hidden) top=Math.max(top,$('tip').getBoundingClientRect().bottom+4);
   const dockOn=!$('dock').hidden, base=dockOn?dockBase():0;
   const ah=VH-top-base-14;
-  // edge to edge on a phone; a framed board only when the screen is wider than the map
-  const c=Math.max(24,Math.floor(Math.min(VW/B.w,ah/B.h)));
+  // fit the whole map when the squares stay big enough to tap; otherwise fill the width and scroll
+  const fit=Math.floor(Math.min(VW/B.w,ah/B.h)), wide=Math.floor(Math.min(VW/B.w,64));
+  const scroll=fit<44&&wide>fit, c=Math.max(24,scroll?wide:fit);
   const full=c*B.w>=VW-12;
-  const y=full?Math.round(top+10):Math.round(top+10+(ah-c*B.h)/2);
-  if(dockOn){ const h=full?Math.max(base,VH-(y+c*B.h)-2):base; const d=$('dock'); if(Math.abs((parseFloat(d.style.height)||0)-h)>.5) d.style.height=h+'px'; }
+  CAM.on=scroll; CAM.ah=ah; CAM.top=top; CAM.bot=VH-base; CAM.max=scroll?c*B.h-ah:0;
+  CAM.t=clamp(CAM.t,0,CAM.max); CAM.v=clamp(CAM.v,0,CAM.max);
+  if(!CAM.drag){ CAM.v+=(CAM.t-CAM.v)*.16; if(Math.abs(CAM.t-CAM.v)<.5) CAM.v=CAM.t; }
+  const y=scroll?Math.round(top+10-CAM.v):full?Math.round(top+10):Math.round(top+10+(ah-c*B.h)/2);
+  if(dockOn){ const h=full&&!scroll?Math.max(base,VH-(y+c*B.h)-2):base; const d=$('dock'); if(Math.abs((parseFloat(d.style.height)||0)-h)>.5) d.style.height=h+'px'; }
   const want={c,x:Math.round((VW-c*B.w)/2)-(full?0:3),y,full};
   if(!BOX.set){ BOX=Object.assign(want,{set:1}); return; }
   BOX.full=full;
-  // glide to the new size so the board never jumps under a finger
-  ['c','x','y'].forEach(k=>{ BOX[k]+=(want[k]-BOX[k])*.2; if(Math.abs(want[k]-BOX[k])<.5) BOX[k]=want[k]; });
+  // glide to the new size so the board never jumps under a finger; scrolling is already smoothed
+  ['c','x'].forEach(k=>{ BOX[k]+=(want[k]-BOX[k])*.2; if(Math.abs(want[k]-BOX[k])<.5) BOX[k]=want[k]; });
+  if(scroll) BOX.y=want.y; else { BOX.y+=(want.y-BOX.y)*.2; if(Math.abs(want.y-BOX.y)<.5) BOX.y=want.y; }
+}
+// bring a square into view if it sits near the edge of what's showing
+function focus(x,y,always){
+  if(!CAM.on) return;
+  const c=BOX.c, top=y*c, cur=CAM.t;
+  if(!always&&top>=cur+c*.6&&top+c<=cur+CAM.ah-c*.6) return;
+  CAM.t=clamp(top+c/2-CAM.ah/2,0,CAM.max);
+}
+// small ink chevrons that say there is more map above or below
+function scrollCues(t){
+  if(!CAM.on) return;
+  const g=ctx, cx=VW/2, b=Math.sin(t*3)*2;
+  const cue=(y,up)=>{ rr(g,cx-22,y-11,44,22,11); g.fillStyle='#fff'; g.fill(); g.lineWidth=2; g.strokeStyle='#000'; g.stroke();
+    g.beginPath(); const d=up?-1:1; g.moveTo(cx-7,y-3*d+b*d); g.lineTo(cx,y+4*d+b*d); g.lineTo(cx+7,y-3*d+b*d); g.lineWidth=2.6; g.lineCap='round'; g.lineJoin='round'; g.stroke(); };
+  if(CAM.v>4) cue(CAM.top+22,true);
+  if(CAM.v<CAM.max-4) cue(CAM.bot-22,false);
 }
 const cellX=x=>BOX.x+(x+.5)*BOX.c, cellY=y=>BOX.y+(y+.5)*BOX.c;
 
@@ -1014,6 +1037,7 @@ function frame(now){
     else if(UI.info&&UI.mode==='idle') brackets(UI.info.x,UI.info.y,t);
     B.units.slice().sort((a,b)=>(a.vy===undefined?a.y:a.vy)-(b.vy===undefined?b.y:b.vy)).forEach(u=>drawOne(u,t));
     drawFX(t,dt);
+    scrollCues(t);
     if(FX.flash>0){ FX.flash=Math.max(0,FX.flash-dt*4); ctx.setTransform(DPR,0,0,DPR,0,0); ctx.globalAlpha=FX.flash*.8; ctx.fillStyle='#fff'; ctx.fillRect(0,0,VW,VH); ctx.globalAlpha=1; }
   }
   LIVE.forEach(f=>f(t,dt));
@@ -1163,15 +1187,27 @@ $('dock').addEventListener('click',e=>{
 
 /* ---------- taps on the map ---------- */
 let down=null;
-cv.addEventListener('pointerdown',e=>{ down={x:e.clientX,y:e.clientY}; audioInit(); });
+cv.addEventListener('pointerdown',e=>{ down={x:e.clientX,y:e.clientY,cam:CAM.v}; CAM.drag=false; try{ cv.setPointerCapture(e.pointerId); }catch(err){} audioInit(); });
+cv.addEventListener('pointermove',e=>{
+  if(!down||!CAM.on) return;
+  const dy=e.clientY-down.y;
+  if(!CAM.drag&&Math.abs(dy)>10) CAM.drag=true;
+  if(CAM.drag){ CAM.v=clamp(down.cam-dy,0,CAM.max); CAM.t=CAM.v; }
+});
+const endDrag=()=>{ CAM.drag=false; down=null; };
+cv.addEventListener('pointercancel',endDrag);
+cv.addEventListener('wheel',e=>{ if(!B||!CAM.on) return; e.preventDefault(); CAM.t=clamp(CAM.t+e.deltaY,0,CAM.max); },{passive:false});
 cv.addEventListener('pointerup',e=>{
+  if(CAM.drag){ endDrag(); return; }
   if(!down||Math.hypot(e.clientX-down.x,e.clientY-down.y)>14) return; down=null;
   if(!B||!$('card').hidden||UI.mode==='off'||UI.mode==='busy'||UI.mode==='enemy') return;
+  if(CAM.on&&(e.clientY<CAM.top||e.clientY>CAM.bot)) return;
   const x=Math.floor((e.clientX-BOX.x)/BOX.c), y=Math.floor((e.clientY-BOX.y)/BOX.c);
   if(!inb(B,x,y)) return; tapCell(x,y);
 });
 function select(u){
   tipAway();
+  focus(u.x,u.y);
   UI.mode='select'; UI.sel=u; UI.info=null; UI.danger=null; UI.R=reach(B,u); UI.from={x:u.x,y:u.y};
   const hits=new Set(), rg=wOf(u).rng, ends=new Set(UI.R.ends.map(e=>key(e.x,e.y)));
   UI.R.ends.forEach(e=>{ for(let dy=-rg[1];dy<=rg[1];dy++) for(let dx=-rg[1];dx<=rg[1];dx++){ const d=Math.abs(dx)+Math.abs(dy), X=e.x+dx, Y=e.y+dy; if(d<rg[0]||d>rg[1]||!inb(B,X,Y)) continue; if(!ends.has(key(X,Y))) hits.add(key(X,Y)); } });
@@ -1356,13 +1392,15 @@ async function endTurn(){
   paintDock(`<p class="hintline" style="margin:auto 0">The enemy is moving…</p>`,'');
   callout('Enemy phase'); sfx('foeturn'); await wait(1000);
   const fresh=dueReinf(B);
-  if(fresh.length){ fresh.forEach(u=>{ u.vx=u.x; u.vy=u.y; u.seed=Math.random()*10; u.appear=0; tween(500,k=>u.appear=k).then(()=>u.appear=undefined); splat(u,8); }); callout('Reinforcements'); sfx('foeturn'); dirty(); await wait(1100); }
+  if(fresh.length){ focus(fresh[0].x,fresh[0].y,true); fresh.forEach(u=>{ u.vx=u.x; u.vy=u.y; u.seed=Math.random()*10; u.appear=0; tween(500,k=>u.appear=k).then(()=>u.appear=undefined); splat(u,8); }); callout('Reinforcements'); sfx('foeturn'); dirty(); await wait(1100); }
   await mend('enemy');
   const order=alive(B,'enemy').filter(u=>!u.fresh).sort((a,b)=>(wOf(a).kind==='staff')-(wOf(b).kind==='staff')||b.y-a.y);
   for(const r of order){
     if(r.hp<=0||r.team!=='enemy') continue;
     const p=plan(B,r);
+    if(p.path.length>1||p.target){ const was=CAM.t; focus(r.x,r.y); if(CAM.on&&Math.abs(CAM.t-was)>4) await wait(320); }
     if(p.path.length>1){ await walk(r,p.path); r.x=p.x; r.y=p.y; }
+    if(p.target){ const was=CAM.t; focus(p.target.x,p.target.y); if(CAM.on&&Math.abs(CAM.t-was)>4) await wait(260); }
     if(p.heal&&p.target.hp>0){ await wait(100); await doHeal(r,p.target); }
     else if(p.raze&&tAt(B,r.x,r.y)==='v'){ B.map[r.y][r.x]='x'; delete B.villages[key(r.x,r.y)]; B.razed++; splat(r,16); sfx('raze'); floatText(r,'Burned',BOX.c*.42); await wait(700); }
     else if(p.target&&p.target.hp>0){ await wait(120); await fight(r,p.target); if(await checkEnd()) return; }
@@ -1371,6 +1409,7 @@ async function endTurn(){
   B.units.forEach(u=>u.fresh=false);
   if(CH.goal.kind==='survive'&&B.turn>=CH.goal.turns){ UI.mode='off'; await wait(300); return endBattle('win'); }
   B.turn++; B.phase='player'; alive(B,'ally').forEach(u=>u.acted=false); dirty(); hud();
+  { const w=alive(B,'ally').find(u=>u.charId==='wren'); if(w) focus(w.x,w.y,true); }
   UI.mode='busy'; await mend('ally');
   UI.mode='idle';
   callout('Player phase',CH.goal.kind==='survive'?`${CH.goal.turns-B.turn+1} turn${CH.goal.turns-B.turn+1===1?'':'s'} to hold`:''); sfx('turn'); dockIdle();
@@ -1392,6 +1431,7 @@ const pips=i=>`<div class="prog" aria-label="Chapter ${i+1} of ${CHAPTERS.length
 const HOW=`<div class="how"><p>Tap one of your units, then a square to move it. Then Attack, Heal, Talk, Visit or Wait.</p>
   <p>Swords beat axes, axes beat lances, lances beat swords. The winner gets +1 damage and +15 hit. Units wear their weapon: solid ink for swords, hatching for lances, dots for axes.</p>
   <p>Four more speed than your foe and you strike twice. Bows can’t hit up close but tear through fliers. Forests, hills and forts make you harder to hit.</p>
+  <p>On a short screen, drag the map up and down to see all of it.</p>
   <p>Tap an enemy to see where it can reach, or tap Danger to see everyone’s. If Wren falls, the battle is lost. On Classic, anyone else who falls is gone for good.</p></div>`;
 
 /* ---------- title ---------- */
@@ -1498,7 +1538,7 @@ function miniMap(c,ch){
 
 /* ---------- a battle ---------- */
 function startBattle(i,ids){
-  CH=CHAPTERS[i]; BOX.set=0;
+  CH=CHAPTERS[i]; BOX.set=0; CAM.v=CAM.t=1e6;
   // fight with a copy of the band so a loss or a retreat changes nothing
   ROSTER=JSON.parse(JSON.stringify(G.roster));
   B=makeBattle(CH,ROSTER,ids); B.chIndex=i; B.fallen=[]; B.recruits=[]; B.levels=[]; B.gifts=[]; B.razed=0;

@@ -11,6 +11,7 @@ const pips=i=>`<div class="prog" aria-label="Chapter ${i+1} of ${CHAPTERS.length
 const HOW=`<div class="how"><p>Tap one of your units, then a square to move it. Then Attack, Heal, Talk, Visit or Wait.</p>
   <p>Swords beat axes, axes beat lances, lances beat swords. The winner gets +1 damage and +15 hit. Units wear their weapon: solid ink for swords, hatching for lances, dots for axes.</p>
   <p>Four more speed than your foe and you strike twice. Bows can’t hit up close but tear through fliers. Forests, hills and forts make you harder to hit.</p>
+  <p>On a short screen, drag the map up and down to see all of it.</p>
   <p>Tap an enemy to see where it can reach, or tap Danger to see everyone’s. If Wren falls, the battle is lost. On Classic, anyone else who falls is gone for good.</p></div>`;
 
 /* ---------- title ---------- */
@@ -117,7 +118,7 @@ function miniMap(c,ch){
 
 /* ---------- a battle ---------- */
 function startBattle(i,ids){
-  CH=CHAPTERS[i]; BOX.set=0;
+  CH=CHAPTERS[i]; BOX.set=0; CAM.v=CAM.t=1e6;
   // fight with a copy of the band so a loss or a retreat changes nothing
   ROSTER=JSON.parse(JSON.stringify(G.roster));
   B=makeBattle(CH,ROSTER,ids); B.chIndex=i; B.fallen=[]; B.recruits=[]; B.levels=[]; B.gifts=[]; B.razed=0;
